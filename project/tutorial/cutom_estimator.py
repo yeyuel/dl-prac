@@ -375,7 +375,7 @@ run_config = tf.contrib.learn.RunConfig(
 )
 
 print(hparams)
-print("Model Directory:", run_config.model_dir)
+print("Model Directory:", run_config.MODEL_DIR)
 print("")
 print("Dataset Size:", TRAIN_SIZE)
 print("Batch Size:", BATCH_SIZE)

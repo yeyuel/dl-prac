@@ -13,7 +13,7 @@ import numpy as np
 from datetime import datetime
 
 import tensorflow as tf
-from tensorflow import data
+from tensorflow.python import data
 
 print ("Tensorflow: {}".format(tf.__version__))
 
@@ -188,9 +188,9 @@ def train_and_evaluate_experiment(params, run_config):
     
     tf.logging.set_verbosity(tf.logging.INFO)
     
-    if tf.gfile.Exists(run_config.model_dir):
+    if tf.gfile.Exists(run_config.MODEL_DIR):
         print("Removing previous artefacts...")
-        tf.gfile.DeleteRecursively(run_config.model_dir)
+        tf.gfile.DeleteRecursively(run_config.MODEL_DIR)
     
     print ('')
     estimator = create_estimator(params, run_config)
