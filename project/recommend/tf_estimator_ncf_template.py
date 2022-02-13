@@ -145,7 +145,6 @@ def model_fn(features, labels, mode, params):
             loss=loss,
             global_step=train.get_global_step()
         )
-        loss = tf.losses.mean_squared_error(labels, tf.squeeze(logits))
     return tf.estimator.EstimatorSpec(
         mode=mode,
         predictions=predictions,
