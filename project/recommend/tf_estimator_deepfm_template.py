@@ -18,20 +18,50 @@ print("Tensorflow: {}".format(tf.__version__))
 """
 constant definition
 """
-DATA_DIR = '../tutorial/data/recommend'
-TRAIN_DATA_FILE = os.path.join(DATA_DIR, 'ml-latest-small/ratings.csv')
-MOVIE_META_FILE = os.path.join(DATA_DIR, 'ml-latest-small/movies.csv')
+DATA_DIR = '../tutorial/data/recommend/ml-latest-small'
+TRAIN_DATA_FILE = os.path.join(DATA_DIR, 'training_samples/part-00000-cbb6a3ce-9d1f-4946-b71d-633de031b904-c000.csv')
+MOVIE_META_FILE = os.path.join(DATA_DIR, 'test_samples/part-00000-d0fab76a-7cae-4607-938f-e7ab8b1453fe-c000.csv')
 MODELS_LOCATION = 'models/movie_lens'
-MODEL_NAME = 'recommender_01'
+MODEL_NAME = 'deep_fm_01'
 MODEL_DIR = os.path.join(MODELS_LOCATION, MODEL_NAME)
 EXPORT_DIR = os.path.join(MODEL_DIR, 'export')
 
 # minimal csv features
-HEADER = ['userId', 'movieId', 'rating', 'timestamp']
-HEADER_DEFAULTS = [0, 0, 0.0, 0]
+FIELDS = {'userId': 0,
+          'movieId': 0,
+          'rating': 3.5,
+          'timestamp': 0,
+          'releaseYear': 0,
+          'movieGenre1': "NA",
+          'movieGenre2': "NA",
+          'movieGenre3': "NA",
+          'movieRatingCount': 0,
+          'movieAvgRating': 0,
+          'movieRatingStddev': 0,
+          'userRatedMovie1': 0,
+          'userRatedMovie2': 0,
+          'userRatedMovie3': 0,
+          'userRatedMovie4': 0,
+          'userRatedMovie5': 0,
+          'userRatingCount': 0,
+          'userAvgReleaseYear': 0,
+          'userReleaseYearStddev': 0,
+          'userAvgRating': 0,
+          'userRatingStddev': 0,
+          'userGenre1': 'NA',
+          'userGenre2': 'NA',
+          'userGenre3': 'NA',
+          'userGenre4': 'NA',
+          'userGenre5': 'NA'}
+HEADER = FIELDS.keys()
+HEADER_DEFAULTS = FIELDS.values()
+
+GENRE_VOCAB = ['Film-Noir', 'Action', 'Adventure', 'Horror', 'Romance', 'War', 'Comedy', 'Western', 'Documentary',
+               'Sci-Fi', 'Drama', 'Thriller',
+               'Crime', 'Fantasy', 'Animation', 'IMAX', 'Mystery', 'Children', 'Musical']
 
 # label
-TARGET_NAME = 'rating'
+TARGET_NAME = 'label'
 
 # training params
 PARAMS = tf.contrib.training.HParams(
@@ -92,7 +122,7 @@ def create_feature_columns(embedding_size):
     :param embedding_size:
     :return: list of feature columns
     """
-    feature_columns = [feature_column.embedding_column(
+    embeddings = [feature_column.embedding_column(
         feature_column.categorical_column_with_identity(
             'userId', num_buckets=num_users + 1
         ),
@@ -103,12 +133,56 @@ def create_feature_columns(embedding_size):
         ),
         embedding_size
     )]
-    return feature_columns
+    genre_columns = ['userGenre1', 'userGenre2', 'userGenre3', 'userGenre4', 'userGenre5',
+                     'movieGenre1', 'movieGenre2', 'movieGenre3']
+    for genre_column in genre_columns:
+        embeddings.append(feature_column.embedding_column(
+            feature_column.categorical_column_with_vocabulary_list(
+                key=genre_column,
+                vocabulary_list=GENRE_VOCAB
+            ),
+            embedding_size
+        ))
+    denses = [
+        feature_column.numeric_column('releaseYear'),
+        feature_column.numeric_column('movieRatingCount'),
+        feature_column.numeric_column('movieAvgRating'),
+        feature_column.numeric_column('movieRatingStddev'),
+        feature_column.numeric_column('userRatingCount'),
+        feature_column.numeric_column('userAvgRating'),
+        feature_column.numeric_column('userRatingStddev')
+    ]
+    return denses, embeddings
 
 
 """
 model function definition
 """
+
+
+def combine_embedding_dense(embeddings, denses):
+    embeddings = tf.concat(embeddings, 1)
+    dense = tf.concat(denses, 1)
+    return tf.concat([embeddings, dense], 1)
+
+
+def fm(embeddings):
+    embeddings = tf.concat(embeddings, 1)
+    sum_sqrt = tf.square(tf.reduce_sum(embeddings, 1))
+    sqrt_sum = tf.reduce_sum(tf.square(embeddings), 1)
+    value = 0.5 * tf.subtract(sum_sqrt, sqrt_sum)
+    value = tf.expand_dims(value, [1])
+    linear = tf.layers.dense(inputs=embeddings, units=1, name='linear_output')
+    return tf.concat([value, linear], -1)
+
+
+def deep_fm(embeddings, denses):
+    input = combine_embedding_dense(embeddings, denses)
+    deep_layer = tf.layers.stack(input, tf.layers.full_connected, [128, 64, 32], scope='fc')
+    fm_layer = fm(embeddings)
+    last_layer = tf.concat([deep_layer, fm_layer], 1)
+    logits = tf.layers.dense(inputs=last_layer, units=1, name='logits')
+    return logits
 
 
 def model_fn(features, labels, mode, params):
